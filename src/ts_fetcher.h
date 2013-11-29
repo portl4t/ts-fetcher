@@ -2,6 +2,10 @@
 #ifndef _TS_FETCHER_H
 #define _TS_FETCHER_H
 
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -129,11 +133,10 @@ typedef struct {
 http_fetcher * ts_http_fetcher_create(TSCont contp, struct sockaddr *addr, int flags);
 void ts_http_fetcher_destroy(http_fetcher *fch);
 
-void ts_http_fetcher_init(http_fetcher *fch, char *method, int method_len, char *uri, int uri_len);
-void ts_http_fetcher_init_common(http_fetcher *fch, int method, char *uri, int uri_len);
-void ts_http_fetcher_init_with_header_str(http_fetcher *fch, char *str, int len);
-void ts_http_fetcher_add_header(http_fetcher *fch, char *name, int name_len, char *value, int value_len);
-void ts_http_fetcher_append_data(http_fetcher *fch, char *data, int len);
+void ts_http_fetcher_init(http_fetcher *fch, const char *method, int method_len, const char *uri, int uri_len);
+void ts_http_fetcher_init_common(http_fetcher *fch, int method, const char *uri, int uri_len);
+void ts_http_fetcher_add_header(http_fetcher *fch, const char *name, int name_len, const char *value, int value_len);
+void ts_http_fetcher_append_data(http_fetcher *fch, const char *data, int len);
 void ts_http_fetcher_copy_data(http_fetcher *fch, TSIOBufferReader readerp, int64_t length, int64_t offset);
 void ts_http_fetcher_launch(http_fetcher *fch);
 void ts_http_fetcher_set_high_water(http_fetcher *fch, int64_t max);
@@ -141,6 +144,10 @@ void ts_http_fetcher_consume_resp_body(http_fetcher *fch, int64_t len);
 
 void ts_http_fetcher_set_ctx(http_fetcher *fch, void *ctx);
 void * ts_http_fetcher_get_ctx(http_fetcher *fch);
+
+#ifdef  __cplusplus
+}
+#endif
 
 #endif
 

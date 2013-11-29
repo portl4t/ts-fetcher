@@ -58,7 +58,7 @@ ts_http_fetcher_create(TSCont contp, struct sockaddr *addr, int flags)
 
     fch->fetch_contp = NULL;
 
-    fch->resp_cl = 0;
+    fch->resp_cl = -1;
     fch->resp_already = 0;
     fch->post_cl = 0;
     fch->post_already = 0;
@@ -89,7 +89,7 @@ ts_http_fetcher_destroy(http_fetcher *fch)
 }
 
 void
-ts_http_fetcher_init(http_fetcher *fch, char *method, int method_len, char *uri, int uri_len)
+ts_http_fetcher_init(http_fetcher *fch, const char *method, int method_len, const char *uri, int uri_len)
 {
     char    buf[2048];
     int     n;
@@ -130,7 +130,7 @@ ts_http_fetcher_init(http_fetcher *fch, char *method, int method_len, char *uri,
 }
 
 void
-ts_http_fetcher_init_common(http_fetcher *fch, int method, char *uri, int uri_len)
+ts_http_fetcher_init_common(http_fetcher *fch, int method, const char *uri, int uri_len)
 {
     char    buf[2048];
     int     n;
@@ -142,7 +142,7 @@ ts_http_fetcher_init_common(http_fetcher *fch, int method, char *uri, int uri_le
 }
 
 void
-ts_http_fetcher_add_header(http_fetcher *fch, char *name, int name_len, char *value, int value_len)
+ts_http_fetcher_add_header(http_fetcher *fch, const char *name, int name_len, const char *value, int value_len)
 {
     if (name_len == TS_MIME_LEN_CONTENT_LENGTH && 
             memcmp(name, TS_MIME_FIELD_CONTENT_LENGTH, name_len) == 0) {      // for POST
@@ -173,6 +173,7 @@ ts_http_fetcher_launch(http_fetcher *fch)
 
     fch->resp_buffer = TSIOBufferCreate();
     fch->resp_reader = TSIOBufferReaderAlloc(fch->resp_buffer);
+    fch->http_parser = TSHttpParserCreate();
 
     fch->fetch_contp = TSContCreate(ts_http_fetch_handler, fch->mutexp);
     TSContDataSet(fch->fetch_contp, fch);
@@ -189,7 +190,29 @@ ts_http_fetcher_launch(http_fetcher *fch)
 }
 
 void
-ts_http_fetcher_append_data(http_fetcher *fch, char *data, int len)
+ts_http_fetcher_consume_resp_body(http_fetcher *fch, int64_t len)
+{
+    if (!fch->header_done)
+        return;
+
+    TSIOBufferReaderConsume(fch->body_reader, len);
+    TSVIOReenable(fch->read_vio);
+}
+
+void
+ts_http_fetcher_set_ctx(http_fetcher *fch, void *ctx)
+{
+    fch->ctx = ctx;
+}
+
+void *
+ts_http_fetcher_get_ctx(http_fetcher *fch)
+{
+    return fch->ctx;
+}
+
+void
+ts_http_fetcher_append_data(http_fetcher *fch, const char *data, int len)
 {
     TSIOBufferWrite(fch->req_buffer, data, len);
 
