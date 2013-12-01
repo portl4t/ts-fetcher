@@ -22,6 +22,10 @@ extern "C" {
 #define TS_FLAG_FETCH_IGNORE_BODY_READY     (1<<2)
 #define TS_FLAG_FETCH_USE_NEW_LOCK          (1<<3)
 
+#define TS_RESP_BUFFER_LOW_WATER            (4*1024)        // we should reenable read_vio when resp_buffer data less than this
+#define TS_BODY_BUFFER_LOW_WATER            (4*1024)        // we should move data from resp_buffer to body_buffer when body_buffer data less than this
+#define TS_BODY_BUFFER_HIGH_WATER           (16*1024)       // we should not move data from resp_buffer to body_buffer more than this
+
 
 typedef enum {
     TS_FETCH_METHOD_DUMMY,
