@@ -1,6 +1,17 @@
 
 #include "ts_fetcher.h"
 
+char * http_method_str[] =  {
+    "DUMMY",
+    "GET",
+    "POST",
+    "CONNECT",
+    "DELETE",
+    "HEAD",
+    "PURGE",
+    "PUT",
+    "LAST"
+};
 
 int ts_http_fetch_handler(TSCont contp, TSEvent event, void *edata);
 int ts_http_fetcher_process_write(http_fetcher *fch, TSEvent event);

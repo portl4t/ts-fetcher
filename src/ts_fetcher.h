@@ -35,19 +35,6 @@ typedef enum {
     TS_FETCH_METHOD_LAST
 } http_method;
 
-char * http_method_str[] =  {
-    "DUMMY",
-    "GET",
-    "POST",
-    "CONNECT",
-    "DELETE",
-    "HEAD",
-    "PURGE",
-    "PUT",
-    "LAST"
-};
-
-
 typedef enum {
     BODY_READY = 0,
     BODY_COMPLETE,
