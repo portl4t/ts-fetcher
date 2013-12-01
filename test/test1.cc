@@ -133,8 +133,11 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
     internal_field = TSMimeHdrFieldFind(rri->requestBufp, rri->requestHdrp, INTERNAL_HEADER_NAME, sizeof(INTERNAL_HEADER_NAME)-1);
     if (internal_field) {
         TSHandleMLocRelease(rri->requestBufp, rri->requestHdrp, internal_field);
+        TSHttpTxnCntl(rh, TS_HTTP_CNTL_SET_LOGGING_MODE, TS_HTTP_CNTL_OFF);
         return TSREMAP_NO_REMAP;
     }
+
+    TSHttpTxnConfigIntSet(rh, TS_CONFIG_HTTP_INSERT_RESPONSE_VIA_STR, 0);
 
     whole_url = TSUrlStringGet(rri->requestBufp, rri->requestUrl, &whole_len);
     field_loc = TSMimeHdrFieldGet(rri->requestBufp, rri->requestHdrp, 0);
