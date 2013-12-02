@@ -24,6 +24,7 @@ libtsfetcher.so:
 	$(COMPILE) -c -fPIC -o $@ $<  $(INC_PATH)
 install:
 	/bin/cp -f $(ALL_LIBS) /usr/lib64/
+	mkdir -p /usr/include/ts_fetcher/
 	/bin/cp -f *.h /usr/include/ts_fetcher/
 clean:
 	rm -f $(ALL_OBJS) $(ALL_PRGS) $(ALL_LIBS)
