@@ -42,7 +42,7 @@ ts_http_fetcher_create(TSCont contp, struct sockaddr *addr, int flags)
     fch->contp = contp;
     fch->aip = *addr;
 
-    if (flags & TS_FLAG_FETCH_USE_NEW_LOCK) {
+    if (flags & TS_FETCH_FLAG_USE_NEW_LOCK) {
         fch->mutexp = TSMutexCreate();
     } else {
         fch->mutexp = TSContMutexGet(contp);
@@ -66,8 +66,11 @@ ts_http_fetcher_create(TSCont contp, struct sockaddr *addr, int flags)
     fch->resp_reader = NULL;
     fch->body_buffer = NULL;
     fch->body_reader = NULL;
+    fch->flow_buffer = NULL;
+    fch->flow_reader = NULL;
 
     fch->fetch_contp = NULL;
+    fch->action = NULL;
 
     fch->resp_cl = -1;
     fch->resp_already = 0;
@@ -91,6 +94,11 @@ ts_http_fetcher_create(TSCont contp, struct sockaddr *addr, int flags)
 void
 ts_http_fetcher_destroy(http_fetcher *fch)
 {
+    if (fch->action) {
+        TSActionCancel(fch->action);
+        fch->action = NULL;
+    }
+
     fch->deleted = 1;
 
     if (fch->ref)
@@ -207,7 +215,11 @@ ts_http_fetcher_consume_resp_body(http_fetcher *fch, int64_t len)
         return;
 
     TSIOBufferReaderConsume(fch->body_reader, len);
-    TSVIOReenable(fch->read_vio);
+
+    if (!fch->deleted && !fch->action &&
+            TSIOBufferReaderAvail(fch->body_reader) < TS_FETCH_MARK_BODY_LOW_WATER) {
+        fch->action = TSContSchedule(fch->fetch_contp, 0, TS_THREAD_POOL_DEFAULT);
+    }
 }
 
 void
@@ -254,7 +266,7 @@ ts_http_fetcher_process_write(http_fetcher *fch, TSEvent event)
 
         case TS_EVENT_ERROR:
         default:
-            return ts_http_fetcher_callback_sm(fch, TS_EVENT_FETCH_ERROR);
+            return ts_http_fetcher_callback_sm(fch, TS_FETCH_EVENT_ERROR);
     }
 
     return 0;
@@ -264,7 +276,6 @@ int
 ts_http_fetcher_process_read(http_fetcher *fch, TSEvent event)
 {
     int         ret;
-    int64_t     left;
 
     switch (event) {
 
@@ -275,44 +286,49 @@ ts_http_fetcher_process_read(http_fetcher *fch, TSEvent event)
             if (!fch->header_done) {
                 ret = ts_http_fetcher_parse_header(fch);
                 if (ret) {
-                    return ts_http_fetcher_callback_sm(fch, TS_EVENT_FETCH_ERROR);
+                    return ts_http_fetcher_callback_sm(fch, TS_FETCH_EVENT_ERROR);
 
                 } else if (fch->header_done) {
-                    if (!(fch->flags & TS_FLAG_FETCH_IGNORE_HEADER_DONE)) {
-                        ret = ts_http_fetcher_callback_sm(fch, TS_EVENT_FETCH_HEADER_DONE);
+                    if (!(fch->flags & TS_FETCH_FLAG_IGNORE_HEADER_DONE)) {
+                        ret = ts_http_fetcher_callback_sm(fch, TS_FETCH_EVENT_HEADER_DONE);
                         if (ret)
-                            return ts_http_fetcher_callback_sm(fch, TS_EVENT_FETCH_ERROR);
+                            return -1;
                     }
                 }
             }
 
-            left = TSIOBufferReaderAvail(fch->resp_reader);
-
             if (event == TS_EVENT_VCONN_READ_READY) {
-                if (fch->header_done) {
-                    ret = ts_http_fetcher_filter_body(fch, BODY_READY);
 
-                    if (ret != TS_EVENT_FETCH_BODY_READY || !(fch->flags & TS_FLAG_FETCH_IGNORE_BODY_READY)) {
+                if (fch->header_done) {
+
+                    if (fch->status_code == TS_HTTP_STATUS_NOT_MODIFIED || fch->status_code == TS_HTTP_STATUS_NO_CONTENT) {
+                        ret = ts_http_fetcher_filter_body(fch, BODY_COMPLETE);
+                    } else {
+                        ret = ts_http_fetcher_filter_body(fch, BODY_READY);
+                    }
+
+                    if (ret != TS_FETCH_EVENT_BODY_READY || !(fch->flags & TS_FETCH_FLAG_IGNORE_BODY_READY)) {
                         if (ts_http_fetcher_callback_sm(fch, ret))
                             return -1;
                     }
-                }
 
-                TSVIOReenable(fch->read_vio);
+                } else {
+                    TSVIOReenable(fch->read_vio);
+                }
 
             } else if (fch->header_done) {
                 ret = ts_http_fetcher_filter_body(fch, BODY_COMPLETE);
                 return ts_http_fetcher_callback_sm(fch, ret);
 
             } else {
-                return ts_http_fetcher_callback_sm(fch, TS_EVENT_FETCH_ERROR);
+                return ts_http_fetcher_callback_sm(fch, TS_FETCH_EVENT_ERROR);
             }
 
             break;
 
         case TS_EVENT_ERROR:
         default:
-            return ts_http_fetcher_callback_sm(fch, TS_EVENT_FETCH_ERROR);
+            return ts_http_fetcher_callback_sm(fch, TS_FETCH_EVENT_ERROR);
     }
 
     return 0;
@@ -398,7 +414,7 @@ ts_http_fetcher_extract(http_fetcher *fch)
         TSHandleMLocRelease(fch->hdr_bufp, fch->hdr_loc, te_loc);
 
     if (fch->chunked) {
-        if (fch->flags & TS_FLAG_FETCH_FORCE_DECHUNK) {
+        if (fch->flags & TS_FETCH_FLAG_FORCE_DECHUNK) {
             chunked_info_init(&fch->cinfo, 1);
         } else {
             chunked_info_init(&fch->cinfo, 0);
@@ -408,6 +424,9 @@ ts_http_fetcher_extract(http_fetcher *fch)
         fch->resp_already = 0;
     }
 
+    fch->flow_buffer = TSIOBufferCreate();
+    fch->flow_reader = TSIOBufferReaderAlloc(fch->flow_buffer);
+
     fch->body_buffer = TSIOBufferCreate();
     fch->body_reader = TSIOBufferReaderAlloc(fch->body_buffer);
 }
@@ -415,7 +434,38 @@ ts_http_fetcher_extract(http_fetcher *fch)
 int
 ts_http_fetcher_filter_body(http_fetcher *fch, int ev)
 {
-    int     ret;
+    int         ret;
+    int64_t     resp_avail, body_avail, wavail, need;
+
+    if (fch->action) {
+        TSActionCancel(fch->action);
+        fch->action = NULL;
+    }
+
+    need = 0;
+    resp_avail = TSIOBufferReaderAvail(fch->resp_reader);
+
+    if (ev != BODY_COMPLETE) {
+
+        body_avail = TSIOBufferReaderAvail(fch->body_reader);
+        wavail = TS_FETCH_MARK_BODY_HIGH_WATER - body_avail;
+
+        if (wavail <= 0)
+            return TS_FETCH_EVENT_BODY_QUIET;
+
+        need = resp_avail > wavail ? wavail : resp_avail;
+
+        TSIOBufferCopy(fch->flow_buffer, fch->resp_reader, need, 0);
+        TSIOBufferReaderConsume(fch->resp_reader, need);
+
+        if (TSIOBufferReaderAvail(fch->resp_reader) < TS_FETCH_MARK_RESP_LOW_WATER)
+            TSVIOReenable(fch->read_vio);
+
+    } else  {
+        TSIOBufferCopy(fch->flow_buffer, fch->resp_reader, resp_avail, 0);
+        TSIOBufferReaderConsume(fch->resp_reader, resp_avail);
+        need = resp_avail;
+    }
 
     if (fch->chunked) {
         ret = ts_http_fetcher_verify_chunked(fch, ev);
@@ -430,18 +480,21 @@ ts_http_fetcher_filter_body(http_fetcher *fch, int ev)
     switch (ret) {
 
         case BODY_READY:
-            return TS_EVENT_FETCH_BODY_READY;
+            if (need == 0)
+                return TS_FETCH_EVENT_BODY_QUIET;
+
+            return TS_FETCH_EVENT_BODY_READY;
 
         case BODY_COMPLETE:
             fch->body_done = 1;
-            return TS_EVENT_FETCH_BODY_COMPLETE;
+            return TS_FETCH_EVENT_BODY_COMPLETE;
 
         default:
             break;
     }
 
     fch->error = 1;
-    return TS_EVENT_FETCH_ERROR;
+    return TS_FETCH_EVENT_ERROR;
 }
 
 int
@@ -452,14 +505,17 @@ ts_http_fetcher_callback_sm(http_fetcher *fch, TSEvent event)
         return -1;
     }
 
+    if (event == TS_FETCH_EVENT_BODY_QUIET)
+        return 0;
+
     fch->ref++;
 
-    if (fch->flags & TS_FLAG_FETCH_USE_NEW_LOCK)
+    if (fch->flags & TS_FETCH_FLAG_USE_NEW_LOCK)
         TSMutexLock(TSContMutexGet(fch->contp));
 
     TSContCall(fch->contp, event, fch);
 
-    if (fch->flags & TS_FLAG_FETCH_USE_NEW_LOCK)
+    if (fch->flags & TS_FETCH_FLAG_USE_NEW_LOCK)
         TSMutexUnlock(TSContMutexGet(fch->contp));
 
     fch->ref--;
@@ -506,6 +562,11 @@ ts_http_fetcher_release(http_fetcher *fch)
     if (fch->body_buffer)
         TSIOBufferDestroy(fch->body_buffer);
 
+    if (fch->flow_reader)
+        TSIOBufferReaderFree(fch->flow_reader);
+    if (fch->flow_buffer)
+        TSIOBufferDestroy(fch->flow_buffer);
+
     if (fch->req_reader)
         TSIOBufferReaderFree(fch->req_reader);
     if (fch->req_buffer)
@@ -520,16 +581,21 @@ ts_http_fetcher_release(http_fetcher *fch)
 int
 ts_http_fetch_handler(TSCont contp, TSEvent event, void *edata)
 {
+    int     ret;
     http_fetcher *fch = (http_fetcher*)TSContDataGet(contp);
 
-    if (edata == fch->read_vio) {
+    if (event == TS_EVENT_IMMEDIATE) {
+        ret = ts_http_fetcher_filter_body(fch, BODY_READY);
+        ts_http_fetcher_callback_sm(fch, (TSEvent)ret);
+
+    } else if (edata == fch->read_vio) {
         ts_http_fetcher_process_read(fch, event);
 
     } else if (edata == fch->write_vio) {
         ts_http_fetcher_process_write(fch, event);
 
     } else {
-        ts_http_fetcher_callback_sm(fch, TS_EVENT_FETCH_ERROR);
+        ts_http_fetcher_callback_sm(fch, TS_FETCH_EVENT_ERROR);
     }
 
     return 0;
@@ -540,10 +606,10 @@ ts_http_fetcher_transfer(http_fetcher *fch, int code)
 {
     int64_t     left;
 
-    left = TSIOBufferReaderAvail(fch->resp_reader);
+    left = TSIOBufferReaderAvail(fch->flow_reader);
 
-    TSIOBufferCopy(fch->body_buffer, fch->resp_reader, left, 0); 
-    TSIOBufferReaderConsume(fch->resp_reader, left);
+    TSIOBufferCopy(fch->body_buffer, fch->flow_reader, left, 0); 
+    TSIOBufferReaderConsume(fch->flow_reader, left);
 
     return code;
 }
@@ -556,7 +622,7 @@ ts_http_fetcher_verify_cl(http_fetcher *fch, int code)
     if (fch->resp_already >= fch->resp_cl)
         return BODY_COMPLETE;
 
-    left = TSIOBufferReaderAvail(fch->resp_reader);
+    left = TSIOBufferReaderAvail(fch->flow_reader);
 
     if (fch->resp_already + left >= fch->resp_cl) {
         need = fch->resp_cl - fch->resp_already;
@@ -564,8 +630,8 @@ ts_http_fetcher_verify_cl(http_fetcher *fch, int code)
         need = left;
     }   
 
-    TSIOBufferCopy(fch->body_buffer, fch->resp_reader, need, 0); 
-    TSIOBufferReaderConsume(fch->resp_reader, need);
+    TSIOBufferCopy(fch->body_buffer, fch->flow_reader, need, 0); 
+    TSIOBufferReaderConsume(fch->flow_reader, need);
 
     fch->resp_already += left;
 
@@ -588,13 +654,13 @@ ts_http_fetcher_verify_chunked(http_fetcher *fch, int code)
     TSIOBufferBlock blk, next_blk;
 
     chunked_info *ci = &fch->cinfo;
-    blk = TSIOBufferReaderStart(fch->resp_reader);
+    blk = TSIOBufferReaderStart(fch->flow_reader);
 
     while (blk) {
 
         next_blk = TSIOBufferBlockNext(blk);
 
-        start = TSIOBufferBlockReadStart(blk, fch->resp_reader, &blk_len);
+        start = TSIOBufferBlockReadStart(blk, fch->flow_reader, &blk_len);
         avail = blk_len;
 
         if (avail) {
@@ -612,9 +678,9 @@ ts_http_fetcher_verify_chunked(http_fetcher *fch, int code)
                         avail -= n;
 
                         if (!ci->dechunk_enabled)
-                            TSIOBufferCopy(fch->body_buffer, fch->resp_reader, n, 0);
+                            TSIOBufferCopy(fch->body_buffer, fch->flow_reader, n, 0);
 
-                        TSIOBufferReaderConsume(fch->resp_reader, n);
+                        TSIOBufferReaderConsume(fch->flow_reader, n);
                         break;
 
                     case CHUNK_WAIT_RETURN:
@@ -622,23 +688,23 @@ ts_http_fetcher_verify_chunked(http_fetcher *fch, int code)
                         avail -= n;
 
                         if (!ci->dechunk_enabled)
-                            TSIOBufferCopy(fch->body_buffer, fch->resp_reader, n, 0);
+                            TSIOBufferCopy(fch->body_buffer, fch->flow_reader, n, 0);
 
-                        TSIOBufferReaderConsume(fch->resp_reader, n);
+                        TSIOBufferReaderConsume(fch->flow_reader, n);
                         break;
 
                     case CHUNK_WAIT_DATA:
                         if (ci->frag_len + avail <= ci->frag_total) {
-                            TSIOBufferCopy(fch->body_buffer, fch->resp_reader, avail, 0);
-                            TSIOBufferReaderConsume(fch->resp_reader, avail);
+                            TSIOBufferCopy(fch->body_buffer, fch->flow_reader, avail, 0);
+                            TSIOBufferReaderConsume(fch->flow_reader, avail);
                             ci->frag_len += avail;
                             avail = 0;
                             break;
                         } else {
                             need = ci->frag_total - ci->frag_len;
                             if (need) {
-                                TSIOBufferCopy(fch->body_buffer, fch->resp_reader, need, 0);
-                                TSIOBufferReaderConsume(fch->resp_reader, need);
+                                TSIOBufferCopy(fch->body_buffer, fch->flow_reader, need, 0);
+                                TSIOBufferReaderConsume(fch->flow_reader, need);
                                 ci->frag_len += need;
                                 avail -= need;
                             }
@@ -654,17 +720,17 @@ ts_http_fetcher_verify_chunked(http_fetcher *fch, int code)
                         avail -= n;
 
                         if (!ci->dechunk_enabled)
-                            TSIOBufferCopy(fch->body_buffer, fch->resp_reader, n, 0);
+                            TSIOBufferCopy(fch->body_buffer, fch->flow_reader, n, 0);
 
-                        TSIOBufferReaderConsume(fch->resp_reader, n);
+                        TSIOBufferReaderConsume(fch->flow_reader, n);
                         break;
 
                     case CHUNK_DATA_DONE:
 
                         if (!ci->dechunk_enabled)
-                            TSIOBufferCopy(fch->body_buffer, fch->resp_reader, avail, 0);
+                            TSIOBufferCopy(fch->body_buffer, fch->flow_reader, avail, 0);
 
-                        TSIOBufferReaderConsume(fch->resp_reader, avail);
+                        TSIOBufferReaderConsume(fch->flow_reader, avail);
                         avail = 0;
                         ci->done = 1;
                         break;
