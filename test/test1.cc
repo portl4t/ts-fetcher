@@ -14,6 +14,11 @@
 
 #include <ts_fetcher/ts_fetcher.h>
 
+
+#define TEST_OUTPUT_HIGH_WATER      (16*1024)           // output buffer中最多存在16k的未发送数据
+#define TEST_OUTPUT_LOW_WATER       (4*1024)            // output buffer中的未发送数据如果小于4k, 则继续consume fetch数据
+
+
 using namespace std;
 
 struct IOHandle {
@@ -88,6 +93,7 @@ static void test1_fetch_launch(ReqInfo *rinfo);
 static int test1_process_read(TSEvent event, ReqInfo *rinfo);
 static int test1_process_write(TSEvent event, ReqInfo *rinfo);
 static int test1_process_fetch(TSEvent event, ReqInfo *rinfo, void *edata);
+static int test1_transfer_data(ReqInfo *rinfo, bool complete);
 
 
 TSReturnCode
@@ -298,8 +304,7 @@ test1_process_write(TSEvent event, ReqInfo *rinfo)
     switch (event) {
 
         case TS_EVENT_VCONN_WRITE_READY:
-            if (TSIOBufferReaderAvail(rinfo->output.reader))
-                TSVIOReenable(rinfo->output.vio);
+            test1_transfer_data(rinfo, 0);
             break;
 
         case TS_EVENT_VCONN_WRITE_COMPLETE:
@@ -328,7 +333,7 @@ test1_setup_write(ReqInfo *rinfo)
 static int
 test1_process_fetch(TSEvent event, ReqInfo *rinfo, void *edata)
 {
-    int64_t             avail, all; 
+    int64_t             all; 
     http_fetcher        *fch;
 
     fch = (http_fetcher*)edata;
@@ -341,20 +346,15 @@ test1_process_fetch(TSEvent event, ReqInfo *rinfo, void *edata)
 
         case TS_FETCH_EVENT_BODY_READY:
         case TS_FETCH_EVENT_BODY_COMPLETE:
-            avail = TSIOBufferReaderAvail(fch->body_reader);
-            TSIOBufferCopy(rinfo->output.buffer, fch->body_reader, avail, 0);
-            ts_http_fetcher_consume_resp_body(fch, avail);
+
+            test1_transfer_data(rinfo, event == TS_FETCH_EVENT_BODY_COMPLETE);
 
             if (event == TS_FETCH_EVENT_BODY_COMPLETE) {
                 all = TSVIONDoneGet(rinfo->output.vio) + TSIOBufferReaderAvail(rinfo->output.reader);
                 TSVIONBytesSet(rinfo->output.vio, all);
             }
 
-            if (TSVIONTodoGet(rinfo->output.vio)) {
-                if (TSIOBufferReaderAvail(rinfo->output.reader) > 0) {
-                    TSVIOReenable(rinfo->output.vio);
-                }
-            } else {
+            if (TSVIONTodoGet(rinfo->output.vio) <= 0) {
                 rinfo->send_complete = 1;
             }
 
@@ -366,5 +366,41 @@ test1_process_fetch(TSEvent event, ReqInfo *rinfo, void *edata)
     }
 
     return 0;
+}
+
+static int
+test1_transfer_data(ReqInfo *rinfo, bool complete)
+{
+    int64_t         fetch_avail;
+    int64_t         unsend;
+    int64_t         wavail;
+    int64_t         need;
+    http_fetcher    *fch;
+
+    fch = rinfo->fch;
+
+    unsend = TSIOBufferReaderAvail(rinfo->output.reader);
+    fetch_avail = TSIOBufferReaderAvail(fch->body_reader);
+
+    if (complete) {
+        need = fetch_avail;
+
+    } else if (unsend >= TEST_OUTPUT_LOW_WATER) {
+        TSVIOReenable(rinfo->output.vio);
+        return 0;
+
+    } else {
+        wavail = TEST_OUTPUT_LOW_WATER - unsend;
+        need = wavail > fetch_avail ? fetch_avail : wavail;
+    }
+
+    TSIOBufferCopy(rinfo->output.buffer, fch->body_reader, need, 0);
+    ts_http_fetcher_consume_resp_body(fch, need);
+
+    if (need + unsend > 0) {
+        TSVIOReenable(rinfo->output.vio);
+    }
+
+    return need;
 }
 
