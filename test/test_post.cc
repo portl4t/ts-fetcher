@@ -14,7 +14,6 @@
 
 #include <ts_fetcher/ts_fetcher.h>
 
-#define INTERNAL_HEADER_NAME   "Fetch-Inner"
 #define TEST_POST_DATA     "no matter what"
 
 using namespace std;
@@ -120,6 +119,7 @@ TSRemapDeleteInstance(void* ih)
 TSRemapStatus
 TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
 {
+    int         ret;
     const char  *name;
     const char  *value;
     int         name_len, value_len;
@@ -128,16 +128,17 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
     int         whole_len;
     TSCont      contp;
     TSMLoc      field_loc, next_field_loc;
-    TSMLoc      internal_field;
     HttpHeader  hh;
 
-    internal_field = TSMimeHdrFieldFind(rri->requestBufp, rri->requestHdrp, INTERNAL_HEADER_NAME, sizeof(INTERNAL_HEADER_NAME)-1);
-    if (internal_field) {
-        TSHandleMLocRelease(rri->requestBufp, rri->requestHdrp, internal_field);
+    ret = TSHttpIsInternalRequest(rh);
+
+    if (!ret) {
+        return TSREMAP_NO_REMAP;                // 内部请求就bypass
+    } else {
         TSHttpTxnCntl(rh, TS_HTTP_CNTL_SET_LOGGING_MODE, TS_HTTP_CNTL_OFF);
-        return TSREMAP_NO_REMAP;
     }
 
+    TSHttpTxnCntl(rh, TS_HTTP_CNTL_SET_LOGGING_MODE, TS_HTTP_CNTL_OFF);
     TSHttpTxnConfigIntSet(rh, TS_CONFIG_HTTP_INSERT_RESPONSE_VIA_STR, 0);
 
     whole_url = TSUrlStringGet(rri->requestBufp, rri->requestUrl, &whole_len);
@@ -250,8 +251,6 @@ test1_fetch_launch(ReqInfo *rinfo)
 
     ts_http_fetcher_add_header(fch, TS_MIME_FIELD_CONTENT_LENGTH, TS_MIME_LEN_CONTENT_LENGTH, 
                                     buf, n);
-
-    ts_http_fetcher_add_header(fch, INTERNAL_HEADER_NAME, sizeof(INTERNAL_HEADER_NAME) - 1, "1", 1);
 
     rinfo->fch = fch;
 
