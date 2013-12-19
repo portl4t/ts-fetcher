@@ -258,7 +258,9 @@ ts_http_fetcher_process_write(http_fetcher *fch, TSEvent event)
     switch (event) {
 
         case TS_EVENT_VCONN_WRITE_READY:
-            TSVIOReenable(fch->write_vio);
+            if (TSIOBufferReaderAvail(fch->req_reader) > 0)
+                TSVIOReenable(fch->write_vio);
+
             break;
 
         case TS_EVENT_VCONN_WRITE_COMPLETE:
