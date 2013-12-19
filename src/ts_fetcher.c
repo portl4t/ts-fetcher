@@ -237,6 +237,9 @@ ts_http_fetcher_get_ctx(http_fetcher *fch)
 void
 ts_http_fetcher_append_data(http_fetcher *fch, const char *data, int len)
 {
+    if (len <= 0 || fch->body_done)
+        return;
+
     TSIOBufferWrite(fch->req_buffer, data, len);
 
     if (fch->launched)
@@ -246,6 +249,9 @@ ts_http_fetcher_append_data(http_fetcher *fch, const char *data, int len)
 void
 ts_http_fetcher_copy_data(http_fetcher *fch, TSIOBufferReader readerp, int64_t length, int64_t offset)
 {
+    if (length <= 0 || fch->body_done)
+        return;
+
     TSIOBufferCopy(fch->req_buffer, readerp, length, offset);
 
     if (fch->launched)
@@ -412,8 +418,13 @@ ts_http_fetcher_extract(http_fetcher *fch)
     if (cl_loc)
         TSHandleMLocRelease(fch->hdr_bufp, fch->hdr_loc, cl_loc);
 
-    if (te_loc)
+    if (te_loc) {
+
+        if (fch->flags & TS_FLAG_FETCH_FORCE_DECHUNK)
+            TSMimeHdrFieldDestroy(fch->hdr_bufp, fch->hdr_loc, te_loc);
+
         TSHandleMLocRelease(fch->hdr_bufp, fch->hdr_loc, te_loc);
+    }
 
     if (fch->chunked) {
         if (fch->flags & TS_FETCH_FLAG_FORCE_DECHUNK) {
