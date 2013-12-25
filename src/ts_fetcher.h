@@ -12,20 +12,20 @@ extern "C" {
 #include <ts/ts.h>
 #include <ts/experimental.h>
 
-#define TS_FETCH_EVENT_HEADER_DONE          63000
-#define TS_FETCH_EVENT_BODY_READY           63001
-#define TS_FETCH_EVENT_BODY_COMPLETE        63002
-#define TS_FETCH_EVENT_ERROR                63003
-#define TS_FETCH_EVENT_BODY_QUIET           63004
+#define TS_EVENT_FETCH_HEADER_DONE          63000
+#define TS_EVENT_FETCH_BODY_READY           63001
+#define TS_EVENT_FETCH_BODY_COMPLETE        63002
+#define TS_EVENT_FETCH_ERROR                63003
+#define TS_EVENT_FETCH_BODY_QUIET           63004
 
-#define TS_FETCH_FLAG_FORCE_DECHUNK         (1<<0)
-#define TS_FETCH_FLAG_IGNORE_HEADER_DONE    (1<<1)
-#define TS_FETCH_FLAG_IGNORE_BODY_READY     (1<<2)
-#define TS_FETCH_FLAG_USE_NEW_LOCK          (1<<3)
+#define TS_FLAG_FETCH_FORCE_DECHUNK         (1<<0)
+#define TS_FLAG_FETCH_IGNORE_HEADER_DONE    (1<<1)
+#define TS_FLAG_FETCH_IGNORE_BODY_READY     (1<<2)
+#define TS_FLAG_FETCH_USE_NEW_LOCK          (1<<3)
 
-#define TS_FETCH_MARK_RESP_LOW_WATER        (4*1024)        // we should reenable read_vio when resp_buffer data less than this
-#define TS_FETCH_MARK_BODY_LOW_WATER        (4*1024)        // we should move data from resp_buffer to body_buffer when body_buffer data less than this
-#define TS_FETCH_MARK_BODY_HIGH_WATER       (16*1024)       // we should not move data from resp_buffer to body_buffer more than this
+#define TS_MARK_FETCH_RESP_LOW_WATER        (4*1024)        // we should reenable read_vio when resp_buffer data less than this
+#define TS_MARK_FETCH_BODY_LOW_WATER        (4*1024)        // we should move data from resp_buffer to body_buffer when body_buffer data less than this
+#define TS_MARK_FETCH_BODY_HIGH_WATER       (16*1024)       // we should not move data from resp_buffer to body_buffer more than this
 
 
 typedef enum {
