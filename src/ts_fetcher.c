@@ -113,36 +113,43 @@ ts_http_fetcher_init(http_fetcher *fch, const char *method, int method_len, cons
     char    buf[2048];
     int     n;
 
+    if (uri_len >= sizeof(buf) - 64)
+        uri_len = sizeof(buf) - 64;
+
     if (method_len == TS_HTTP_LEN_GET && !strncasecmp(method, TS_HTTP_METHOD_GET, TS_HTTP_LEN_GET)) {
         fch->method = TS_FETCH_METHOD_GET;
-        n = snprintf(buf, sizeof(buf)-1, "GET %.*s HTTP/1.1\r\n", uri_len, uri);
+        n = sprintf(buf, "GET %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_POST && !strncasecmp(method, TS_HTTP_METHOD_POST, TS_HTTP_LEN_POST)) {
         fch->method = TS_FETCH_METHOD_POST;
-        n = snprintf(buf, sizeof(buf)-1, "POST %.*s HTTP/1.1\r\n", uri_len, uri);
+        n = sprintf(buf, "POST %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_CONNECT && !strncasecmp(method, TS_HTTP_METHOD_CONNECT, TS_HTTP_LEN_CONNECT)) {
         fch->method = TS_FETCH_METHOD_CONNECT;
-        n = snprintf(buf, sizeof(buf)-1, "CONNECT %.*s HTTP/1.1\r\n", uri_len, uri);
+        n = sprintf(buf, "CONNECT %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_DELETE && !strncasecmp(method, TS_HTTP_METHOD_DELETE, TS_HTTP_LEN_DELETE)) {
         fch->method = TS_FETCH_METHOD_DELETE;
-        n = snprintf(buf, sizeof(buf)-1, "DELETE %.*s HTTP/1.1\r\n", uri_len, uri);
+        n = sprintf(buf, "DELETE %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_HEAD && !strncasecmp(method, TS_HTTP_METHOD_HEAD, TS_HTTP_LEN_HEAD)) {
         fch->method = TS_FETCH_METHOD_HEAD;
-        n = snprintf(buf, sizeof(buf)-1, "HEAD %.*s HTTP/1.1\r\n", uri_len, uri);
+        n = sprintf(buf, "HEAD %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_PURGE && !strncasecmp(method, TS_HTTP_METHOD_PURGE, TS_HTTP_LEN_PURGE)) {
         fch->method = TS_FETCH_METHOD_PURGE;
-        n = snprintf(buf, sizeof(buf)-1, "PURGE %.*s HTTP/1.1\r\n", uri_len, uri);
+        n = sprintf(buf, "PURGE %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_PUT && !strncasecmp(method, TS_HTTP_METHOD_PUT, TS_HTTP_LEN_PUT)) {
         fch->method = TS_FETCH_METHOD_PUT;
-        n = snprintf(buf, sizeof(buf)-1, "PUT %.*s HTTP/1.1\r\n", uri_len, uri);
+        n = sprintf(buf, "PUT %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else {
-        n = snprintf(buf, sizeof(buf)-1, "%.*s %.*s HTTP/1.1\r\n", method_len, method, uri_len, uri);
+
+        if (method_len >= 16)
+            method_len = 16;
+
+        n = sprintf(buf, "%.*s %.*s HTTP/1.1\r\n", method_len, method, uri_len, uri);
     }
 
     TSIOBufferWrite(fch->req_buffer, buf, n);
@@ -155,6 +162,10 @@ ts_http_fetcher_init_common(http_fetcher *fch, int method, const char *uri, int 
     int     n;
 
     fch->method = method;
+
+    if (uri_len >= sizeof(buf) - 64)
+        uri_len = sizeof(buf) - 64;
+
     n = sprintf(buf, "%s %.*s HTTP/1.1\r\n", http_method_str[method], uri_len,uri);
 
     TSIOBufferWrite(fch->req_buffer, buf, n);
