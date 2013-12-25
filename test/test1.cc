@@ -340,16 +340,16 @@ test1_process_fetch(TSEvent event, ReqInfo *rinfo, void *edata)
 
     switch (event) {
 
-        case TS_FETCH_EVENT_HEADER_DONE:
+        case TS_EVENT_FETCH_HEADER_DONE:
             test1_setup_write(rinfo);
             break;
 
-        case TS_FETCH_EVENT_BODY_READY:
-        case TS_FETCH_EVENT_BODY_COMPLETE:
+        case TS_EVENT_FETCH_BODY_READY:
+        case TS_EVENT_FETCH_BODY_COMPLETE:
 
-            test1_transfer_data(rinfo, event == TS_FETCH_EVENT_BODY_COMPLETE);
+            test1_transfer_data(rinfo, event == TS_EVENT_FETCH_BODY_COMPLETE);
 
-            if (event == TS_FETCH_EVENT_BODY_COMPLETE) {
+            if (event == TS_EVENT_FETCH_BODY_COMPLETE) {
                 all = TSVIONDoneGet(rinfo->output.vio) + TSIOBufferReaderAvail(rinfo->output.reader);
                 TSVIONBytesSet(rinfo->output.vio, all);
             }
@@ -360,7 +360,7 @@ test1_process_fetch(TSEvent event, ReqInfo *rinfo, void *edata)
 
             break;
 
-        case TS_FETCH_EVENT_ERROR:
+        case TS_EVENT_FETCH_ERROR:
         default:
             return -1;
     }
