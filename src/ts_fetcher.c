@@ -174,8 +174,8 @@ ts_http_fetcher_init_common(http_fetcher *fch, int method, const char *uri, int 
 void
 ts_http_fetcher_add_header(http_fetcher *fch, const char *name, int name_len, const char *value, int value_len)
 {
-    if (name_len == TS_MIME_LEN_CONTENT_LENGTH && 
-            memcmp(name, TS_MIME_FIELD_CONTENT_LENGTH, name_len) == 0) {      // for POST
+    if ((name_len == TS_MIME_LEN_CONTENT_LENGTH) &&
+            (strncasecmp(name, TS_MIME_FIELD_CONTENT_LENGTH, name_len) == 0)) {      // for POST
         fch->post_cl = atoll(value);
     }
 
