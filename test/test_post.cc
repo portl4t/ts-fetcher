@@ -240,7 +240,7 @@ test1_fetch_launch(ReqInfo *rinfo)
 
     fch =  ts_http_fetcher_create(rinfo->contp, &rinfo->client_addr, 0);
 
-    ts_http_fetcher_init_common(fch, TS_FETCH_METHOD_POST, rinfo->url.c_str(), rinfo->url.size());
+    ts_http_fetcher_init_common(fch, TS_FETCH_HTTP_METHOD_POST, rinfo->url.c_str(), rinfo->url.size());
 
     for (unsigned int i = 0; i < rinfo->ua_headers.size(); i++) {
         ts_http_fetcher_add_header(fch, rinfo->ua_headers[i].name.c_str(), rinfo->ua_headers[i].name.size(),

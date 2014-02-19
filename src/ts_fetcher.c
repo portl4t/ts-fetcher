@@ -117,31 +117,31 @@ ts_http_fetcher_init(http_fetcher *fch, const char *method, int method_len, cons
         uri_len = sizeof(buf) - 64;
 
     if (method_len == TS_HTTP_LEN_GET && !strncasecmp(method, TS_HTTP_METHOD_GET, TS_HTTP_LEN_GET)) {
-        fch->method = TS_FETCH_METHOD_GET;
+        fch->method = TS_FETCH_HTTP_METHOD_GET;
         n = sprintf(buf, "GET %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_POST && !strncasecmp(method, TS_HTTP_METHOD_POST, TS_HTTP_LEN_POST)) {
-        fch->method = TS_FETCH_METHOD_POST;
+        fch->method = TS_FETCH_HTTP_METHOD_POST;
         n = sprintf(buf, "POST %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_CONNECT && !strncasecmp(method, TS_HTTP_METHOD_CONNECT, TS_HTTP_LEN_CONNECT)) {
-        fch->method = TS_FETCH_METHOD_CONNECT;
+        fch->method = TS_FETCH_HTTP_METHOD_CONNECT;
         n = sprintf(buf, "CONNECT %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_DELETE && !strncasecmp(method, TS_HTTP_METHOD_DELETE, TS_HTTP_LEN_DELETE)) {
-        fch->method = TS_FETCH_METHOD_DELETE;
+        fch->method = TS_FETCH_HTTP_METHOD_DELETE;
         n = sprintf(buf, "DELETE %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_HEAD && !strncasecmp(method, TS_HTTP_METHOD_HEAD, TS_HTTP_LEN_HEAD)) {
-        fch->method = TS_FETCH_METHOD_HEAD;
+        fch->method = TS_FETCH_HTTP_METHOD_HEAD;
         n = sprintf(buf, "HEAD %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_PURGE && !strncasecmp(method, TS_HTTP_METHOD_PURGE, TS_HTTP_LEN_PURGE)) {
-        fch->method = TS_FETCH_METHOD_PURGE;
+        fch->method = TS_FETCH_HTTP_METHOD_PURGE;
         n = sprintf(buf, "PURGE %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else if (method_len == TS_HTTP_LEN_PUT && !strncasecmp(method, TS_HTTP_METHOD_PUT, TS_HTTP_LEN_PUT)) {
-        fch->method = TS_FETCH_METHOD_PUT;
+        fch->method = TS_FETCH_HTTP_METHOD_PUT;
         n = sprintf(buf, "PUT %.*s HTTP/1.1\r\n", uri_len, uri);
 
     } else {
@@ -210,8 +210,9 @@ ts_http_fetcher_launch(http_fetcher *fch)
 
     fch->read_vio = TSVConnRead(fch->http_vc, fch->fetch_contp, fch->resp_buffer, INT64_MAX);
 
-    if (fch->method == TS_FETCH_METHOD_POST && fch->post_cl >= 0) {
+    if ((fch->method == TS_FETCH_HTTP_METHOD_POST || fch->method == TS_FETCH_HTTP_METHOD_PUT) && fch->post_cl >= 0) {
         fch->write_vio = TSVConnWrite(fch->http_vc, fch->fetch_contp, fch->req_reader, hdr_len + fch->post_cl);
+
     } else {
         fch->write_vio = TSVConnWrite(fch->http_vc, fch->fetch_contp, fch->req_reader, hdr_len);
     }
