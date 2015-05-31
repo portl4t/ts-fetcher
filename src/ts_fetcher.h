@@ -122,6 +122,7 @@ typedef struct {
     unsigned        chunked:1;
     unsigned        error:1;
     unsigned        launched:1;
+    unsigned        stopped:1;
 //    unsigned        init_with_str:1;
 } http_fetcher;
 
@@ -146,4 +147,3 @@ void * ts_http_fetcher_get_ctx(http_fetcher *fch);
 #endif
 
 #endif
-
